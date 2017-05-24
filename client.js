@@ -12,12 +12,13 @@ function CryptopiaClient(keys, otp, params) {
 	var self = this;
 
 	var config = {
-		url: 'www.cryptopia.co.nz',
+		url: 'https://www.cryptopia.co.nz',
 		version: 'api',
 		key: keys.api_key,
-		secret: keys.api_secret,
+		secret: keys.secret_key,
 		otp: otp,
-		timeoutMS: 5000
+		timeoutMS: 5000,
+		nonce: Math.floor(new Date().getTime() / 1000)
 	};
 
 	/**
@@ -32,6 +33,11 @@ function CryptopiaClient(keys, otp, params) {
 			public: ['GetCurrencies', 'GetTradePairs', 'GetMarkets', 'GetMarket', 'GetMarketHistory', 'GetMarketOrders'],
 			private: ['GetBalance', 'GetDepositAddress', 'GetOpenOrders', 'GetTradeHistory', 'GetTransactions', 'SubmitTrade', 'CancelTrade', 'SubmitTip']
 		};
+
+		if(params === null){
+			params = {};
+		}
+
 		if(methods.public.indexOf(method) !== -1) {
 			return publicMethod(method, params, callback);
 		}
@@ -56,7 +62,7 @@ function CryptopiaClient(keys, otp, params) {
 		var path	= '/' + config.version + '/' + method;
 		var url		= config.url + path;
 
-		return rawRequest(url, {}, params, callback);
+		return rawGetRequest(url, {}, params, callback);
 	}
 
 	/**
@@ -67,22 +73,14 @@ function CryptopiaClient(keys, otp, params) {
 	 * @return {Object}            The request object
 	 */
 	function privateMethod(method, params, callback) {
-		params = params || {};
-
 		var path	= '/' + config.version + '/' + method;
 		var url		= config.url + path;
 
-		params.nonce = new Date() * 1000; // spoof microsecond
-
-		if(config.otp !== undefined) {
-			params.otp = config.otp;
-		}
-
-		var signature = getMessageSignature(path, params, params.nonce);
+		//params.nonce = new Date() * 1000; // spoof microsecond
+		var signature = getMessageSignature(url, params, config.nonce);
 
 		var headers = {
-			'API-Key': config.key,
-			'API-Sign': signature
+			'Authorization': signature
 		};
 
 		return rawRequest(url, headers, params, callback);
@@ -95,16 +93,25 @@ function CryptopiaClient(keys, otp, params) {
 	 * @param  {Integer} nonce   A unique, incrementing integer
 	 * @return {String}          The request signature
 	 */
-	function getMessageSignature(path, request, nonce) {
-		var message	= querystring.stringify(request);
+	function getMessageSignature(url, params, n) {
+		var nonce = Math.floor(new Date().getTime() / 1000);
+		var md5 = crypto.createHash('md5').update( JSON.stringify( params ) ).digest();
+		var requestContentBase64String = md5.toString('base64');
+		//console.log(requestContentBase64String)
+		//EVERYTHING IS THE SAME AT THIS POINT! (except)
+		var signature = config.key + "POST" + encodeURIComponent( url ).toLowerCase() + nonce + requestContentBase64String;
+		var hmacsignature = crypto.createHmac('sha256', new Buffer( config.secret, "base64" ) ).update( signature ).digest().toString('base64');
+		var header_value = "amx " + config.key + ":" + hmacsignature + ":" + nonce;
+
+		/*var message	= querystring.stringify(request);
 		var secret	= new Buffer(config.secret, 'base64');
 		var hash	= new crypto.createHash('sha256');
 		var hmac	= new crypto.createHmac('sha512', secret);
 
 		var hash_digest	= hash.update(nonce + message).digest('binary');
-		var hmac_digest	= hmac.update(path + hash_digest, 'binary').digest('base64');
+		var hmac_digest	= hmac.update(path + hash_digest, 'binary').digest('base64');*/
 
-		return hmac_digest;
+		return header_value;
 	}
 
 	/**
@@ -117,22 +124,74 @@ function CryptopiaClient(keys, otp, params) {
 	 */
 	function rawRequest(url, headers, params, callback) {
 		// Set custom User-Agent string
-		headers['User-Agent'] = 'Cryptopia Javascript API Client';
+		headers['Content-Type'] = 'application/json; charset=utf-8';
 
 		var options = {
-			url: url,
+			host: "www.cryptopia.co.nz",
+			path: '/api/GetBalance',
 			method: 'POST',
-			headers: headers,
-			form: params,
-			timeout: config.timeoutMS
+			url: url,
+			headers: headers
 		};
+
+		console.log(options)
 
 		var req = request.post(options, function(error, response, body) {
 			if(typeof callback === 'function') {
 				var data;
 
 				if(error) {
-					return callback.call(self, new Error('Error in server response: ' + JSON.stringify(error)), null);
+					return callback.call(self, new Error('Error in server response: ' + JSON.stringify(error) + " :response: " + error), null);
+				}
+
+				try {
+					data = JSON.parse(body);
+				}
+				catch(e) {
+					return callback.call(self, new Error('Could not understand response from server: ' + JSON.stringify(response.body)), null);
+				}
+				//If any errors occured, cryptopia will give back an array with error strings under
+				//the key "error". We should then propagate back the error message as a proper error.
+				if(data.error && data.error.length) {
+					var cryptopiaError = null;
+					data.error.forEach(function(element) {
+						if (element.charAt(0) === "E") {
+							cryptopiaError = element.substr(1);
+							return false;
+						}
+					});
+					if (cryptopiaError) {
+						return callback.call(self, new Error('Cryptopia API returned error: ' + cryptopiaError), null);
+					}
+				}
+				else {
+					return callback.call(self, null, data);
+				}
+			}
+		});
+		return req;
+	}
+
+	function rawGetRequest(url, headers, params, callback) {
+		// Set custom User-Agent string
+		headers['Content-Type'] = 'application/json; charset=utf-8';
+
+		var options = {
+			url: url,
+			method: 'GET',
+			headers: headers,
+			form: params,
+			timeout: config.timeoutMS
+		};
+
+		console.log(options)
+
+		var req = request.get(options, function(error, response, body) {
+			if(typeof callback === 'function') {
+				var data;
+
+				if(error) {
+					return callback.call(self, new Error('Error in server response: ' + JSON.stringify(error) + " :response: " + error), null);
 				}
 
 				try {
