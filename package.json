@@ -1,6 +1,6 @@
 {
   "name": "cryptopia-client",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Client for using public and private api methods to access data from cryptopia.com  ",
   "main": "client.js",
   "scripts": {
