@@ -1,17 +1,11 @@
 # cryptopia-client
 
-	[![NPM Version][npm-image]][npm-url]
-  [![NPM Downloads][downloads-image]][downloads-url]
-  [![Linux Build][travis-image]][travis-url]
-  [![Windows Build][appveyor-image]][appveyor-url]
-  [![Test Coverage][coveralls-image]][coveralls-url]
-
 ## The only methods that are currently finished and working are:
 ### Private:
-		GetBalance
+GetBalance
 
 ### Public:
-		GetCurrencies
+GetCurrencies
 
 I have not tested sending params, so you should not expect anything to work if you send params..
 
