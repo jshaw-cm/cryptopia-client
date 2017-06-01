@@ -9,13 +9,16 @@ Public:
 
 I have not tested sending params, so you should not expect anything to work if you send params..
 
-Ex:
+## Installation
 npm install --save cryptopia-client
 
+
+## Usage
+```js
 var CryptopiaClient = require("cryptopia-client");
-
+```
 (These keys can be created at https://www.cryptopia.co.nz/Security when you are logged into your cryptopia account...)
-
+```js
 var keys = {
 	api_key: "get your own damn api key",
 	secret_key: "get your own damn secret key"
@@ -30,9 +33,9 @@ function callback(error, data) {
 
 	console.log("Data: ", data);
 }
-
+```
 or
-
+```js
 client.GetCurrencies(callback);
 
 function callback(error, data) {
@@ -40,4 +43,5 @@ function callback(error, data) {
 
 	console.log("Data: ", data);
 }
+```
 
