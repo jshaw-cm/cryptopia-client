@@ -1,13 +1,11 @@
 # cryptopia-client
 
-## The only methods that are currently finished and working are:
+## The methods that are currently finished and working are:
 ### Private:
-GetBalance
+GetBalance, GetOpenOrders, GetTradeHistory, SubmitTrade, CancelTrade (by orderId or all trades) 
 
 ### Public:
-GetCurrencies
-
-I have not tested sending params, so you should not expect anything to work if you send params..
+GetCurrencies, GetMarketOrders
 
 ## Installation
 ```bash
