@@ -1,23 +1,17 @@
 var	https 				= require("https"),
-		crypto 				= require("crypto");
+	crypto 				= require("crypto");
 
 function CryptopiaClient(keys){
-	var self 		= this;
+	var self 	= this;
 	self.keys 	= keys;
 
-	function fetch_data(api_method, callback, params) {
-		var methods = {
-			private: 'GetBalance',
-			public: 'GetCurrencies'
-		}
+	function fetch_data(api_method, callback, is_private, params) {
 
 		//If it's a public method, make public request
-		if(methods.public.indexOf(api_method) > -1){
+		if(!is_private){
 			return public_request(callback, api_method, params);
-		} 
-
-		//If it's a private method, make a private request
-		else if(methods.private.indexOf(api_method) > -1){
+		} else {
+			//If it's a private method, make a private request
 			//If any keys are missing, throw an error...
 			if(!self.keys.api_key || !self.keys.secret_key){
 				throw new Error("I couldn't find one of the keys.");
@@ -25,14 +19,9 @@ function CryptopiaClient(keys){
 				return private_request(callback, api_method, params);
 			}
 		} 
-
-		//Throw error if the api method doesn't exist
-		else {
-			throw new Error("The api method '" + api_method + "' isn't currently supported by this client.");
-		}
 	}
 
-	function public_request(callback, api_method) {
+	function public_request(callback, api_method, params) {
 		var params = params || {}
 
 		var options = {
@@ -40,28 +29,18 @@ function CryptopiaClient(keys){
 			path: '/Api/' + api_method,
 			method: 'GET'
 		}
-
-		var req = https.request(options, (res) => {
-		  res.setEncoding('utf8');
-		  res.on('data', (chunk) => {
-				callback.call(this, null, chunk);
-		  }); 	
-		});
-
-		req.on('error', (e) => {
-			callback.call(this, e, null);
-		});
-
-		req.end();
+		sendRequestCallback(callback, options, '');
+		
 	}
 
-	function private_request(callback, api_method) {
+	function private_request(callback, api_method, params) {
 		var params = params || {}
 		var amx_value = generate_amx(params, api_method);
-
+		var body = JSON.stringify(params);
 		var headers = { 
 		 'Authorization': amx_value, 
 		 'Content-Type':'application/json; charset=utf-8',
+		 'Content-Length' : Buffer.byteLength(body),
 		};
 
 		var options = {
@@ -70,32 +49,41 @@ function CryptopiaClient(keys){
 			method: 'POST',
 			headers: headers
 		}
-		console.log(options)
+		//console.log(options)
+		sendRequestCallback(callback, options, body);
+	}
+	
+	
+    var sendRequestCallback = function(callback, options, body) {
 		var req = https.request(options, (res) => {
-			var json = null;
-		  res.setEncoding('utf8');
-		  res.on('data', (chunk) => {
-				json = chunk;
-		  });
-		  res.on('end', () => {
-		  	callback.call(this, null, json);
-		  })
+			var json = "";
+			res.setEncoding('utf8');
+			res.on('data', (chunk) => {
+				json += chunk;
+			});
+			res.on('end', () => {
+				console.log(json);
+				result = JSON.parse(json);
+				//if (result.Success) {
+				callback.call(this, null, result.Data);
+				//} else {
+					// it is actually an error
+					//callback.call(this, e, null);
+				//}
+			})
 		});
 
 		req.on('error', (e) => {
 			callback.call(this, e, null);
 		});
 
-		//write data to request body
-		//This wouldn't work until I used this line...
-		req.write(JSON.stringify(params));
+		req.write(body);
 		req.end();
-
-	}
+    };
 
 	function generate_amx(params, api_method) {
 			//I made this function out of a block of code that can be found here https://www.cryptopia.co.nz/Forum/Thread/262
-			var nonce = Math.floor(new Date().getTime() / 1000);
+			var nonce = Math.floor(new Date().getTime() /10);
 			var md5 = crypto.createHash('md5').update( JSON.stringify( params ) ).digest();
 			var requestContentBase64String = md5.toString('base64');
 			var signature = self.keys.api_key + "POST" + encodeURIComponent( 'https://www.cryptopia.co.nz/Api/' + api_method ).toLowerCase() + nonce + requestContentBase64String;
@@ -105,13 +93,50 @@ function CryptopiaClient(keys){
 			return amx;
 	}
 
+	// public methods
 	self.GetCurrencies = (callback, params) => {
-		fetch_data('GetCurrencies', callback);
+		fetch_data('GetCurrencies', callback, false);
+	};
+	
+	self.GetMarketOrders = (callback, market, count) => {
+		if (market) {
+			market = market.replace('/', '_');
+		}
+		fetch_data( 'GetMarketOrders/' + market + '/' + count, callback, false);
 	};
 
-	self.GetBalance = (callback) => {
-		fetch_data('GetBalance', callback);
+	// private methods
+	self.GetBalance = (callback, currency) => {
+		var params = {Currency : currency};
+		
+		fetch_data('GetBalance', callback, true, params);
 	};
+
+	self.GetOpenOrders = (callback, market) => {
+		var params = {Market : market};
+		fetch_data('GetOpenOrders', callback, true, params);
+	};
+	
+	self.GetTradeHistory = (callback, market, count) => {
+		var params = {Market : market, Count: count};
+		fetch_data('GetTradeHistory', callback, true, params);
+	};
+
+	self.SubmitTrade = (callback, market, tradeType, rate, amount) => {
+		var params = {Market : market, Type : tradeType, Rate : rate, Amount : amount};
+		fetch_data('SubmitTrade', callback, true, params);
+	};
+
+	self.CancelTrade = (callback, orderId) => {
+		var params = {Type : 'Trade', OrderId : orderId};
+		fetch_data('CancelTrade', callback, true, params);
+	};
+
+	self.CancelAllTrades = (callback) => {
+		var params = {Type : 'All'};
+		fetch_data('CancelTrade', callback, true, params);
+	};
+	
 }
 
 module.exports = CryptopiaClient;
